@@ -1,15 +1,25 @@
 #!/bin/bash
-
-# get physical disk layout
-# Bay ATA port numbers, as determined
-# via lsscsi
-# ---------
-# | 8 | 6 |
-# ---------
-# | 4 | 7 |
-# ---------
-# | 5 | 9 | 
-# ---------
+# Usage: 
+#      CTADiscHealth.sh
+#
+# Last updated:
+#      2023/02/01
+#
+# Options:
+#      None at the moment
+#
+# Description:
+#      This script looks for the front bay drives via lsscsi, gets them to run a 
+#      SMART short test and then prints out a human friendly summary
+#
+# Caveats:
+#      - Requires lsscsi and skdump, sktest from libatasmart package
+#      - Presumes ATA port numbers are static. 
+#
+# TODO:
+#      - Look into table cell padding issue
+#
+#########################################################
 
 printf \
 "\
@@ -19,6 +29,16 @@ printf \
 #                             #
 ###############################
 "
+
+# Bay ATA port numbers, as determined
+# via lsscsi
+# ---------
+# | 8 | 6 |
+# ---------
+# | 4 | 7 |
+# ---------
+# | 5 | 9 | 
+# ---------
 
 position_array=(disk_tl disk_tr disk_ml disk_mr disk_bl disk_br)
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Usage: 
-#      ZetaDiscWipe.sh
+#      CTADiscWipe.sh
 #
 # Last updated:
 #      2023/01/26
@@ -18,7 +18,8 @@
 #
 # TODO:
 #      - Investigate detecting secure-erase in progress
-#      - Get main script to properly wait for child windows to finish 
+#      - Get main script to properly wait for child windows to finish
+#      - Incorporate the table layout / lsscsi stuff from CTADiskHealth.sh
 #
 #########################################################
 
