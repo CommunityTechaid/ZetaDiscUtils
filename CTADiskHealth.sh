@@ -17,6 +17,7 @@
 #      - Presumes ATA port numbers are static. 
 #
 # TODO:
+#      - Quietly handle missing disks / empty bays
 #      - Look into table cell padding issue
 #
 #########################################################
