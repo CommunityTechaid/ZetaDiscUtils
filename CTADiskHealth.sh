@@ -66,6 +66,14 @@ disk_mr_pretty+=$(lsscsi -bs | grep "\[7:" | awk '{print ": "$3}')
 disk_bl_pretty+=$(lsscsi -bs | grep "\[5:" | awk '{print ": "$3}')
 disk_br_pretty+=$(lsscsi -bs | grep "\[9:" | awk '{print ": "$3}')
 
+# Append /dev location to pretty to help locate if wipe fails
+disk_tl_pretty+=$disk_tl
+disk_tr_pretty+=$disk_tr
+disk_ml_pretty+=$disk_ml
+disk_mr_pretty+=$disk_mr
+disk_bl_pretty+=$disk_bl
+disk_br_pretty+=$disk_br
+
 # Set default wait time
 time_to_wait=0
 
