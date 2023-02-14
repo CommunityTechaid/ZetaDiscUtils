@@ -141,14 +141,14 @@ $col
 $row
 " \
 "$disk_tl_pretty" "${cell:${#disk_tl_pretty}}" \
-"$disk_tl" "${cell:${#disk_tl}}" \
 "$disk_tr_pretty" "${cell:${#disk_tr_pretty}}" \
+"$disk_tl" "${cell:${#disk_tl}}" \
 "$disk_tr" "${cell:${#disk_tr}}" \
 "$disk_ml_pretty" "${cell:${#disk_ml_pretty}}" \
-"$disk_ml" "${cell:${#disk_ml}}" \
 "$disk_mr_pretty" "${cell:${#disk_mr_pretty}}" \
+"$disk_ml" "${cell:${#disk_ml}}" \
 "$disk_mr" "${cell:${#disk_mr}}" \
 "$disk_bl_pretty" "${cell:${#disk_bl_pretty}}" \
-"$disk_bl" "${cell:${#disk_bl}}" \
 "$disk_br_pretty" "${cell:${#disk_br_pretty}}" \
+"$disk_bl" "${cell:${#disk_bl}}" \
 "$disk_br" "${cell:${#disk_br}}" 
