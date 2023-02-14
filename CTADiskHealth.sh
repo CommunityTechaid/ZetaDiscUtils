@@ -66,14 +66,6 @@ disk_mr_pretty+=$(lsscsi -bs | grep "\[7:" | awk '{print ": "$3}')
 disk_bl_pretty+=$(lsscsi -bs | grep "\[5:" | awk '{print ": "$3}')
 disk_br_pretty+=$(lsscsi -bs | grep "\[9:" | awk '{print ": "$3}')
 
-# Append /dev location to pretty to help locate if wipe fails
-disk_tl_pretty+=$disk_tl
-disk_tr_pretty+=$disk_tr
-disk_ml_pretty+=$disk_ml
-disk_mr_pretty+=$disk_mr
-disk_bl_pretty+=$disk_bl
-disk_br_pretty+=$disk_br
-
 # Set default wait time
 time_to_wait=0
 
@@ -134,20 +126,29 @@ printf \
 $row
 $col
 # %s%s # %s%s #
-$col
-$row
-$col
 # %s%s # %s%s #
 $col
 $row
 $col
+# %s%s # %s%s #
+# %s%s # %s%s #
+$col
+$row
+$col
+# %s%s # %s%s #
 # %s%s # %s%s #
 $col
 $row
 " \
 "$disk_tl_pretty" "${cell:${#disk_tl_pretty}}" \
+"$disk_tl" "${cell:${#disk_tl}}" \
 "$disk_tr_pretty" "${cell:${#disk_tr_pretty}}" \
+"$disk_tr" "${cell:${#disk_tr}}" \
 "$disk_ml_pretty" "${cell:${#disk_ml_pretty}}" \
+"$disk_ml" "${cell:${#disk_ml}}" \
 "$disk_mr_pretty" "${cell:${#disk_mr_pretty}}" \
+"$disk_mr" "${cell:${#disk_mr}}" \
 "$disk_bl_pretty" "${cell:${#disk_bl_pretty}}" \
-"$disk_br_pretty" "${cell:${#disk_br_pretty}}"
+"$disk_bl" "${cell:${#disk_bl}}" \
+"$disk_br_pretty" "${cell:${#disk_br_pretty}}" \
+"$disk_br" "${cell:${#disk_br}}" 
