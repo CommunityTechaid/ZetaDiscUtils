@@ -78,6 +78,7 @@ spawn() {
         # Spawn new terminal, print time, start the wipe and then print DONE when finished
         # Exec bash leaves the terminal open. Long line as multi-line bugged out
         gnome-terminal -- bash -c "date +Start\ time\:\ %H:%M; sudo ata-secure-erase -f /dev/$disk; echo \"DONE WIPING /dev/$disk\"; exec bash"
+        # gnome-terminal -- bash -c "date +Start\ time\:\ %H:%M; sudo nwipe --autonuke --nogui --method=zero --verify=last --nowait /dev$disk; echo \"DONE WIPING /dev/$disk\"; exec bash"
     done
 }
 

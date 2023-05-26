@@ -56,16 +56,21 @@ class Disk:
 
 
 class DiskWidgetGroup(QWidget):
-    def __init__(self, disk_object):
+    def __init__(self, dev_path, cta_id, make, model, size, health, wipe_status,
+                 serial, position):
         QWidget.__init__(self)
 
-        self.do = disk_object
-        self.make = QLabel(self.do.make)
-        self.model = QLabel(self.do.model)
-        self.size = QLabel(self.do.size)
-        self.health = QLabel(self.do.health)
-        self.wipe_status = QLabel(self.do.wipe_status)
-        self.serial = QLabel(self.do.serial)
+        self.setObjectName(position)
+
+        self.dev_path = dev_path
+        self.cta_id = cta_id
+        self.position = position
+        self.make = QLabel(make)
+        self.model = QLabel(model)
+        self.size = QLabel(size)
+        self.health = QLabel(health)
+        self.wipe_status = QLabel(wipe_status)
+        self.serial = QLabel(serial)
 
         self.check_health_button = QPushButton("Check")
         self.check_health_button.clicked.connect(self.health_check)
@@ -73,12 +78,12 @@ class DiskWidgetGroup(QWidget):
         self.start_wipe_button = QPushButton("Wipe")
         self.start_wipe_button.clicked.connect(self.start_wipe)
 
-        self.cta_id_input = QLineEdit(self.do.cta_id)
+        self.cta_id_input = QLineEdit(self.cta_id)
         self.cta_id_input.returnPressed.connect(self.start_wipe_button.click)
 
         layout = QGridLayout()
         self.setLayout(layout)
-        groupbox = QGroupBox(self.do.position)
+        groupbox = QGroupBox(self.position)
         inner = QGridLayout()
 
         layout.addWidget(groupbox)
@@ -104,7 +109,7 @@ class DiskWidgetGroup(QWidget):
     def health_check(self):
         self.check_health_button.setEnabled(False)
         time_to_wait = 0
-        skdump_info = subprocess.run(['sudo', 'skdump', self.do.dev_path],
+        skdump_info = subprocess.run(['sudo', 'skdump', self.dev_path],
                                      text=True,
                                      capture_output=True)
         self_test_search = re.search('Short Self-Test Polling Time: ([0-9]+)',
@@ -121,7 +126,7 @@ class DiskWidgetGroup(QWidget):
 
         run_test = subprocess.run(['sudo',
                                    'sktest',
-                                   self.do.dev_path,
+                                   self.dev_path,
                                    'short'],
                                   text=True,
                                   capture_output=True)
@@ -130,13 +135,12 @@ class DiskWidgetGroup(QWidget):
 
         if test_outcome == "PASSED":
             self.health.setText("Healthy")
-            disk.health = "Healthy"
             self.health.setStyleSheet("background-color: lightgreen;\
                                             border: 1px solid black")
             self.update()
+
         elif test_outcome == "FAILED":
             self.health.setText("Unhealthy")
-            disk.health = "Unhealthy"
             self.health.setStyleSheet("background-color: red;\
                                             border: 1px solid black")
             self.update()
@@ -155,20 +159,17 @@ class DiskWidgetGroup(QWidget):
 
             if return_value == 16384:
                 self.wipe_status.setText("Wiping")
-                disk.wipe_status = "Wiping"
                 self.update()
                 # Spawn nwipe
                 nwipe_outcome = "FAILED"
 
                 if nwipe_outcome == "PASSED":
                     self.wipe_status.setText("WIPED")
-                    disk.wipe_status = "Wiped"
                     self.wipe_status.setStyleSheet("background-color: lightgreen;\
                                                     border: 1px solid black")
                     self.update()
                 elif nwipe_outcome == "FAILED":
                     self.wipe_status.setText("FAILED")
-                    disk.wipe_status = "FAILED"
                     self.wipe_status.setStyleSheet("background-color: red;\
                                                     border: 1px solid black")
                     self.update()
@@ -306,7 +307,18 @@ main.addLayout(header, 0, 0, 1, 2, Qt.AlignCenter)
 
 for disk in disk_list:
     get_disk_info(disk)
-    main.addWidget(DiskWidgetGroup(disk))
+    dev_path = disk.dev_path
+    make = disk.make
+    model = disk.model
+    size = disk.size
+    health = disk.health
+    wipe_status = disk.wipe_status
+    serial = disk.serial
+    cta_id = disk.cta_id
+    position = disk.position
+    widget_group = DiskWidgetGroup(dev_path, cta_id, make, model, size, health,
+                                   wipe_status, serial, position)
+    main.addWidget(widget_group)
 
 row_count = main.rowCount()
 
