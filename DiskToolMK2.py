@@ -21,12 +21,13 @@
 
 from dataclasses import dataclass, MISSING
 from datetime import datetime
+from time import sleep
 import subprocess
 import re
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
                              QHBoxLayout, QLabel, QGridLayout, QGroupBox,
                              QLineEdit, QProgressBar, QMessageBox)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import *
 
 
 @dataclass
@@ -55,10 +56,32 @@ class Disk:
                     setattr(self, name, field.default_factory())
 
 
+class HealthThread(QThread):
+    def __init__(self, parent = None):
+        QThread.__init__(self, parent)
+
+
+    def __del__(self):
+        self.exiting = True
+        self.wait()
+
+    def run(self):
+        # Note called directly, invoked by Qt
+        while not self.exiting
+            pass
+
+        self.emit(SIGNAL("BALLS"))
+
+
+
+
+
 class DiskWidgetGroup(QWidget):
     def __init__(self, dev_path, cta_id, make, model, size, health, wipe_status,
                  serial, position):
         QWidget.__init__(self)
+
+        self.health_thread = HealthWorker()
 
         self.setObjectName(position)
 
@@ -107,33 +130,45 @@ class DiskWidgetGroup(QWidget):
         groupbox.setLayout(inner)
 
     def health_check(self):
+        # Disable button to avoid multiple requests
         self.check_health_button.setEnabled(False)
-        time_to_wait = 0
-        skdump_info = subprocess.run(['sudo', 'skdump', self.dev_path],
-                                     text=True,
-                                     capture_output=True)
-        self_test_search = re.search('Short Self-Test Polling Time: ([0-9]+)',
-                                     skdump_info.stdout)
-        if self_test_search:
-            short_test_time = self_test_search.group(1)
-        else:
-            short_test_time = 0
 
-        if short_test_time > time_to_wait:
-            time_to_wait = short_test_time
+        # exit is dev_path is Null 
+        if self.dev_path is None:
+            return
 
+        # Update UI to indicate something is happening
         self.health.setText("Testing")
-
-        run_test = subprocess.run(['sudo',
-                                   'sktest',
-                                   self.dev_path,
-                                   'short'],
-                                  text=True,
-                                  capture_output=True)
+        self.health.setStyleSheet("background-color: yellow;\
+                                  border: 1px solid black")
+        self.repaint()
 
         test_outcome = "FAILED"
 
-        if test_outcome == "PASSED":
+        selt.test = ProcessRun(target=run, args=(["sleep", 10]))
+
+        # run_test = subprocess.run(['sudo',
+        #                            'smartctl',
+        #                            '-t',
+        #                            'short',
+        #                            self.dev_path],
+        #                           text=True,
+        #                           capture_output=True)
+
+        # sleep(130)
+
+
+        # skdump_test_info = subprocess.run(['sudo', 'skdump', self.dev_path],
+        #                                   text=True,
+        #                                   capture_output=True)
+
+        # self_test_search = re.search('Overall Status: (.+)',
+        #                              skdump_test_info.stdout)
+
+        # if self_test_search:
+        #     test_outcome = self_test_search.group(1)
+        
+        if test_outcome == "GOOD":
             self.health.setText("Healthy")
             self.health.setStyleSheet("background-color: lightgreen;\
                                             border: 1px solid black")
@@ -142,6 +177,12 @@ class DiskWidgetGroup(QWidget):
         elif test_outcome == "FAILED":
             self.health.setText("Unhealthy")
             self.health.setStyleSheet("background-color: red;\
+                                            border: 1px solid black")
+            self.update()
+
+        else:
+            self.health.setText(test_outcome)
+            self.health.setStyleSheet("background-color: yellow;\
                                             border: 1px solid black")
             self.update()
 
@@ -208,9 +249,13 @@ def get_disk_path(bay_number):
     lsscsi_info = subprocess.run(['lsscsi', '-b'],
                                  text=True,
                                  capture_output=True)
-    line = re.search('\['+str(bay_number)+':.+?\\n',
-                     lsscsi_info.stdout).group(0)
-    path = re.search('/dev/[a-z]{3}', line).group(0)
+    search = re.search('\['+str(bay_number)+':.+?\\n',
+                       lsscsi_info.stdout)
+    if search is not None:
+        line = search.group(0)
+        path = re.search('/dev/[a-z]{3}', line).group(0)
+    else:
+        path = None
     return path
 
 
@@ -220,10 +265,14 @@ def get_disk_make(bay_number):
                                  capture_output=True,
                                  text=True,
                                  )
-    line = re.search('scsi'+str(bay_number)+'.+?\\n.+?\\n',
-                     lsscsi_info.stdout).group(0)
-    model = re.search('(?<=Vendor: )(.+?)(?=Model:)', line).group(0).rstrip()
-    return model
+    search= re.search('scsi'+str(bay_number)+'.+?\\n.+?\\n',
+                      lsscsi_info.stdout)
+    if search is not None:
+        line = search.group(0)
+        make = re.search('(?<=Vendor: )(.+?)(?=Model:)', line).group(0).rstrip()
+    else:
+        make = None
+    return make
 
 
 def get_disk_model(bay_number):
@@ -232,9 +281,13 @@ def get_disk_model(bay_number):
                                  capture_output=True,
                                  text=True,
                                  )
-    line = re.search('scsi'+str(bay_number)+'.+?\\n.+?\\n',
-                     lsscsi_info.stdout).group(0)
-    model = re.search('(?<=Model: )(.+?)(?=Rev:)', line).group(0).rstrip()
+    search = re.search('scsi'+str(bay_number)+'.+?\\n.+?\\n',
+                     lsscsi_info.stdout)
+    if search is not None:
+        line = search.group(0)
+        model = re.search('(?<=Model: )(.+?)(?=Rev:)', line).group(0).rstrip()
+    else:
+        model = None
     return model
 
 
@@ -244,23 +297,30 @@ def get_disk_size(bay_number):
                                  capture_output=True,
                                  text=True,
                                  )
-    # group 1 as the group 0 is the matching group and 1 is the capturing group
-    size = re.search('\['+str(bay_number)+':.+?\s+\/dev\/[a-z]{3}\s+(.+?)\\n',
-                     lsscsi_info.stdout).group(1)
+    search = re.search('\['+str(bay_number)+':.+?\s+\/dev\/[a-z]{3}\s+(.+?)\\n',
+                       lsscsi_info.stdout)
+    if search is not None:
+        # group 1 as the group 0 is the matching group and 1 is the capturing group
+        size = search.group(1)
+    else:
+        size = None
     return size
 
 
 def get_disk_serial(dev_path):
-    # Take dev_path, parse skdump output and return serial
-    skdump_info = subprocess.run(['sudo', 'skdump', dev_path],
-                                 text=True,
-                                 capture_output=True)
-    # group 1 as the group 0 is the matching group and 1 is the capturing group
-    serial_search = re.search('Serial:\s\[(.+)\]\\n', skdump_info.stdout)
-    if serial_search:
-        serial = serial_search.group(1)
+    if dev_path is None:
+        serial = None
     else:
-        serial = "Unknown"
+        # Take dev_path, parse skdump output and return serial
+        skdump_info = subprocess.run(['sudo', 'skdump', dev_path],
+                                     text=True,
+                                     capture_output=True)
+        # group 1 as the group 0 is the matching group and 1 is the capturing group
+        serial_search = re.search('Serial:\s\[(.+)\]\\n', skdump_info.stdout)
+        if serial_search:
+            serial = serial_search.group(1)
+        else:
+            serial = "Unknown"
     return serial
 
 
@@ -276,12 +336,12 @@ def get_disk_serial(dev_path):
 # | 5 | 9 |
 # ---------
 
-top_left = Disk("Top Left", 0)
-top_right = Disk("Top Right", 0)
-mid_left = Disk("Middle left", 0)
-mid_right = Disk("Middle Right", 0)
-bottom_left = Disk("Bottom Left", 0)
-bottom_right = Disk("Bottom Right", 0)
+top_left = Disk("Top Left", 8)
+top_right = Disk("Top Right", 6)
+mid_left = Disk("Middle left", 4)
+mid_right = Disk("Middle Right", 7)
+bottom_left = Disk("Bottom Left", 5)
+bottom_right = Disk("Bottom Right", 9)
 
 disk_list = [top_left, top_right,
              mid_left, mid_right,
