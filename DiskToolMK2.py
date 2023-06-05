@@ -56,23 +56,87 @@ class Disk:
                     setattr(self, name, field.default_factory())
 
 
-class HealthThread(QThread):
-    def __init__(self, parent = None):
-        QThread.__init__(self, parent)
+class HealthWorker(QObject):
+    finished = pyqtSignal()
+    status = pyqtSignal(str)
+
+    def __init__(self, path):
+        super(HealthWorker, self).__init__()
+        self.path = path
+
+    @pyqtSlot()
+    def health_run(self):
+        # for i in range(1, 4):
+        #     sleep(1)
+        #     self.status.emit(str(i))
+
+        run_test = subprocess.run(['sudo',
+                                   'smartctl',
+                                   '-t',
+                                   'short',
+                                   self.path],
+                                  text=True,
+                                  capture_output=True)
+
+        # Captive mode doesn't seem to be actually captive
+        sleep(130)
 
 
-    def __del__(self):
-        self.exiting = True
-        self.wait()
+        skdump_test_info = subprocess.run(['sudo', 'skdump', self.path],
+                                          text=True,
+                                          capture_output=True)
 
-    def run(self):
-        # Note called directly, invoked by Qt
-        while not self.exiting
-            pass
+        self_test_search = re.search('Overall Status: ([A-Za-z0-9]*_*[A-Za-z0-9]*)',
+                                     skdump_test_info.stdout)
 
-        self.emit(SIGNAL("BALLS"))
+        if self_test_search:
+            test_outcome = self_test_search.group(1)            
+
+        self.status.emit(test_outcome)
+
+        self.finished.emit()
 
 
+class DiskWipeWorker(QObject):
+    finished = pyqtSignal()
+    status = pyqtSignal(str)
+
+    def __init__(self, path, cta_id):
+        super(DiskWipeWorker, self).__init__()
+        self.path = path
+        self.cta_id = cta_id
+
+    @pyqtSlot()
+    def wipe_run(self):
+        
+        # skdump_test_info = subprocess.run(['sudo', 'skdump', self.path],
+        #                                   text=True,
+        #                                   capture_output=True)
+
+        logfile = "nwipe-"+str(self.cta_id)+".txt"
+
+        nwipe_run = subprocess.run(['sudo',
+                                    'nwipe',
+                                    '--exclude=/dev/sda',
+                                    '--autonuke'
+                                    '--method=zero',
+                                    '--verify=last',
+                                    '--nowait',
+                                    '--nogui',
+                                    '--logfile='+logfile,
+                                    self.path],
+                                    text=True,
+                                    capture_output=True)
+
+        # load log file
+
+        # parse log file for status
+
+        test_outcome = "FAILED"          
+
+        self.status.emit(test_outcome)
+
+        self.finished.emit()
 
 
 
@@ -80,8 +144,6 @@ class DiskWidgetGroup(QWidget):
     def __init__(self, dev_path, cta_id, make, model, size, health, wipe_status,
                  serial, position):
         QWidget.__init__(self)
-
-        self.health_thread = HealthWorker()
 
         self.setObjectName(position)
 
@@ -143,51 +205,40 @@ class DiskWidgetGroup(QWidget):
                                   border: 1px solid black")
         self.repaint()
 
-        test_outcome = "FAILED"
 
-        selt.test = ProcessRun(target=run, args=(["sleep", 10]))
+        self.obj = HealthWorker(path=self.dev_path)
+        self.thread = QThread()
+        self.obj.status.connect(self.updateHealthStatus)
+        self.obj.moveToThread(self.thread)
+        self.obj.finished.connect(self.thread.quit)
+        self.thread.started.connect(self.obj.health_run)
+        self.thread.start()
 
-        # run_test = subprocess.run(['sudo',
-        #                            'smartctl',
-        #                            '-t',
-        #                            'short',
-        #                            self.dev_path],
-        #                           text=True,
-        #                           capture_output=True)
-
-        # sleep(130)
-
-
-        # skdump_test_info = subprocess.run(['sudo', 'skdump', self.dev_path],
-        #                                   text=True,
-        #                                   capture_output=True)
-
-        # self_test_search = re.search('Overall Status: (.+)',
-        #                              skdump_test_info.stdout)
-
-        # if self_test_search:
-        #     test_outcome = self_test_search.group(1)
-        
-        if test_outcome == "GOOD":
+    def updateHealthStatus(self, status):
+        if status == "GOOD":
             self.health.setText("Healthy")
             self.health.setStyleSheet("background-color: lightgreen;\
                                             border: 1px solid black")
-            self.update()
-
-        elif test_outcome == "FAILED":
+        elif status == "FAILED":
             self.health.setText("Unhealthy")
             self.health.setStyleSheet("background-color: red;\
                                             border: 1px solid black")
-            self.update()
-
+        elif status == "BAD_SECTOR":
+            self.health.setText("Unhealthy (bad sector)")
+            self.health.setStyleSheet("background-color: orange;\
+                                            border: 1px solid black")
         else:
-            self.health.setText(test_outcome)
+            self.health.setText(status)
             self.health.setStyleSheet("background-color: yellow;\
                                             border: 1px solid black")
-            self.update()
 
     def start_wipe(self):
+        # Disable button to avoid multiple requests
         self.start_wipe_button.setEnabled(False)
+        # exit is dev_path is Null 
+        if self.dev_path is None:
+            return
+
         inputNumber = self.cta_id_input.text()
         if inputNumber.isdigit():
             msg = QMessageBox()
@@ -199,21 +250,18 @@ class DiskWidgetGroup(QWidget):
             return_value = msg.exec_()
 
             if return_value == 16384:
+                self.cta_id = inputNumber
                 self.wipe_status.setText("Wiping")
                 self.update()
-                # Spawn nwipe
-                nwipe_outcome = "FAILED"
 
-                if nwipe_outcome == "PASSED":
-                    self.wipe_status.setText("WIPED")
-                    self.wipe_status.setStyleSheet("background-color: lightgreen;\
-                                                    border: 1px solid black")
-                    self.update()
-                elif nwipe_outcome == "FAILED":
-                    self.wipe_status.setText("FAILED")
-                    self.wipe_status.setStyleSheet("background-color: red;\
-                                                    border: 1px solid black")
-                    self.update()
+                # Spawn nwipe in DiskWipeWorker
+                self.obj = DiskWipeWorker(path=self.dev_path, cta_id=self.cta_id)
+                self.thread = QThread()
+                self.obj.status.connect(self.updateWipeStatus)
+                self.obj.moveToThread(self.thread)
+                self.obj.finished.connect(self.thread.quit)
+                self.thread.started.connect(self.obj.wipe_run)
+                self.thread.start()
 
             else:
                 self.start_wipe_button.setEnabled(True)
@@ -227,7 +275,19 @@ class DiskWidgetGroup(QWidget):
             msg.setWindowTitle("CTA ID Warning")
             msg.exec_()
 
-        # self.start_wipe_button.setText(self.cta_id_input.text())
+    def updateWipeStatus(self, status):
+        if status == "PASSED":
+            self.wipe_status.setText("Wiped")
+            self.wipe_status.setStyleSheet("background-color: lightgreen;\
+                                            border: 1px solid black")
+        elif status == "FAILED":
+            self.wipe_status.setText("FAILED")
+            self.wipe_status.setStyleSheet("background-color: red;\
+                                            border: 1px solid black")
+        else:
+            self.wipe_status.setText(status)
+            self.wipe_status.setStyleSheet("background-color: yellow;\
+                                            border: 1px solid black")
 
 
 def get_disk_info(disk_object):
