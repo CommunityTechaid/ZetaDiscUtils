@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
                              QHBoxLayout, QLabel, QGridLayout, QGroupBox,
                              QLineEdit, QProgressBar, QMessageBox)
 from PyQt5.QtCore import *
+import paramiko
 
 
 @dataclass
@@ -56,6 +57,33 @@ class Disk:
                     setattr(self, name, field.default_factory())
 
 
+
+class remoteFiles():
+    host = "172.24.211.134"
+    port = 22
+    transport = paramiko.Transport((host, port))
+    password = "ThreeInOne!"
+    username = "netboot-log"
+    transport.connect(username = username, password = password)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    sftp.chdir("./shredos")
+
+    def upload(self, file):
+        self.sftp.put(file, file)
+
+    def list_files(self):
+        files = self.sftp.listdir()
+        return files
+
+    def get_file(self, file):
+        self.sftp.get(file)
+
+    def close(self):
+        self.sftp.close()
+        self.transport.close()
+    
+
+
 class HealthWorker(QObject):
     finished = pyqtSignal()
     status = pyqtSignal(str)
@@ -66,10 +94,6 @@ class HealthWorker(QObject):
 
     @pyqtSlot()
     def health_run(self):
-        # for i in range(1, 4):
-        #     sleep(1)
-        #     self.status.emit(str(i))
-
         run_test = subprocess.run(['sudo',
                                    'smartctl',
                                    '-t',
@@ -108,17 +132,13 @@ class DiskWipeWorker(QObject):
 
     @pyqtSlot()
     def wipe_run(self):
-        
-        # skdump_test_info = subprocess.run(['sudo', 'skdump', self.path],
-        #                                   text=True,
-        #                                   capture_output=True)
-
-        logfile = "nwipe-"+str(self.cta_id)+".txt"
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        logfile = "nwipe_log_"+str(self.cta_id)+"_"+timestamp+".txt"
 
         nwipe_run = subprocess.run(['sudo',
                                     'nwipe',
                                     '--exclude=/dev/sda',
-                                    '--autonuke'
+                                    '--autonuke',
                                     '--method=zero',
                                     '--verify=last',
                                     '--nowait',
@@ -128,11 +148,31 @@ class DiskWipeWorker(QObject):
                                     text=True,
                                     capture_output=True)
 
-        # load log file
+        grab_last_line = subprocess.run(['tail', '-1', logfile],
+                                        text=True,
+                                        capture_output=True)
 
-        # parse log file for status
+        last_line = grab_last_line.stdout
 
-        test_outcome = "FAILED"          
+        if "Nwipe successfully completed." in last_line:
+            test_outcome = "Wiped"
+        elif "Nwipe was aborted by the user" in last_line:
+            # Shouldn't ever be an issue
+            test_outcome = "Aborted"
+        elif "Storage devices not found." in last_line:
+            # Shouldn't ever be an issue
+            test_outcome = "Device not found"
+        elif "Devices not found." in last_line:
+            # Shouldn't ever be an issue
+            test_outcome = "Device not found"
+        elif "Nwipe exited with errors" in last_line:
+            test_outcome = "FAILED"
+        else:
+            test_outcome = "FAILED"     
+
+        t = remoteFiles()
+        t.upload(logfile)
+        t.close()
 
         self.status.emit(test_outcome)
 
@@ -276,7 +316,7 @@ class DiskWidgetGroup(QWidget):
             msg.exec_()
 
     def updateWipeStatus(self, status):
-        if status == "PASSED":
+        if status == "Wiped":
             self.wipe_status.setText("Wiped")
             self.wipe_status.setStyleSheet("background-color: lightgreen;\
                                             border: 1px solid black")
