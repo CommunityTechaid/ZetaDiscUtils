@@ -24,6 +24,8 @@ from datetime import datetime
 from time import sleep
 import subprocess
 import re
+import os
+import fnmatch
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
                              QHBoxLayout, QLabel, QGridLayout, QGroupBox,
                              QLineEdit, QProgressBar, QMessageBox)
@@ -59,21 +61,22 @@ class Disk:
 
 
 class remoteFiles():
-    host = "172.24.211.134"
-    port = 22
-    transport = paramiko.Transport((host, port))
-    password = "ThreeInOne!"
-    username = "netboot-log"
-    transport.connect(username = username, password = password)
-    sftp = paramiko.SFTPClient.from_transport(transport)
-    sftp.chdir("./shredos")
+    def __init__(self):
+        self.host = "theta"
+        self.port = 22
+        self.transport = paramiko.Transport((self.host, self.port))
+        self.password = "ThreeInOne!"
+        self.username = "netboot-log"
+        self.transport.connect(username = self.username, password = self.password)
+        self.sftp = paramiko.SFTPClient.from_transport(self.transport)
+        self.sftp.chdir("./shredos/")
 
     def upload(self, file):
         self.sftp.put(file, file)
 
     def list_files(self):
-        files = self.sftp.listdir()
-        return files
+        self.files = self.sftp.listdir()
+        return self.files
 
     def get_file(self, file):
         self.sftp.get(file)
@@ -110,11 +113,15 @@ class HealthWorker(QObject):
                                           text=True,
                                           capture_output=True)
 
+        # self_test_search = skdump_test_info.stdout
+
         self_test_search = re.search('Overall Status: ([A-Za-z0-9]*_*[A-Za-z0-9]*)',
                                      skdump_test_info.stdout)
 
         if self_test_search:
-            test_outcome = self_test_search.group(1)            
+            test_outcome = self_test_search.group(1)
+        else:
+            test_outcome = self.path+" ERROR"
 
         self.status.emit(test_outcome)
 
@@ -132,12 +139,13 @@ class DiskWipeWorker(QObject):
 
     @pyqtSlot()
     def wipe_run(self):
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        logfile = "nwipe_log_"+str(self.cta_id)+"_"+timestamp+".txt"
+        datestamp = datetime.now().strftime('%Y-%m-%d')
+        timestamp = datetime.now().strftime('%H%M%S')
+        logfile = "nwipe_log_"+datestamp+"--"+str(self.cta_id)+"--BULK_"+timestamp+".txt"
 
         nwipe_run = subprocess.run(['sudo',
                                     'nwipe',
-                                    '--exclude=/dev/sda',
+                                    '--exclude=/dev/nvme0n1',
                                     '--autonuke',
                                     '--method=zero',
                                     '--verify=last',
@@ -170,9 +178,9 @@ class DiskWipeWorker(QObject):
         else:
             test_outcome = "FAILED"     
 
-        t = remoteFiles()
-        t.upload(logfile)
-        t.close()
+        self.t = remoteFiles()
+        self.t.upload(logfile)
+        self.t.close()
 
         self.status.emit(test_outcome)
 
@@ -200,6 +208,11 @@ class DiskWidgetGroup(QWidget):
         self.check_health_button = QPushButton("Check")
         self.check_health_button.clicked.connect(self.health_check)
 
+        self.view_wipelog_button = QPushButton("View log")
+        self.view_wipelog_button.clicked.connect(self.open_wipelog)
+        # Disable to start with, only enable once wipe has started
+        self.view_wipelog_button.setEnabled(False)
+
         self.start_wipe_button = QPushButton("Wipe")
         self.start_wipe_button.clicked.connect(self.start_wipe)
 
@@ -226,6 +239,7 @@ class DiskWidgetGroup(QWidget):
         inner.addWidget(self.check_health_button, 4, 2)
         inner.addWidget(QLabel("Wipe status:"), 5, 0)
         inner.addWidget(self.wipe_status, 5, 1)
+        inner.addWidget(self.view_wipelog_button, 5, 2)
         inner.addWidget(QLabel("CTA ID:"), 6, 0)
         inner.addWidget(self.cta_id_input, 6, 1)
         inner.addWidget(self.start_wipe_button, 6, 2)
@@ -272,9 +286,29 @@ class DiskWidgetGroup(QWidget):
             self.health.setStyleSheet("background-color: yellow;\
                                             border: 1px solid black")
 
+    def open_wipelog(self):
+        for file in os.listdir('.'):
+            if fnmatch.fnmatch(file, "TEST-nwipe_log_"+str(self.cta_id)+"*"):
+                logfile = open(file, 'r').read()
+
+
+        log = QMessageBox()
+        log.setIcon(QMessageBox.Information)
+        log.setStandardButtons(QMessageBox.Close)
+        log.setWindowTitle(str(self.dev_path)+" wipe log")
+        log.setText("Here is the log file:")
+        log.setInformativeText(logfile)
+        log.exec_()
+
+
+
+
     def start_wipe(self):
         # Disable button to avoid multiple requests
         self.start_wipe_button.setEnabled(False)
+        # Enable wipelog button
+        self.view_wipelog_button.setEnabled(True)
+
         # exit is dev_path is Null 
         if self.dev_path is None:
             return
@@ -289,9 +323,12 @@ class DiskWidgetGroup(QWidget):
             msg.setInformativeText("Do you want to proceed and wipe this drive under this ID?")
             return_value = msg.exec_()
 
-            if return_value == 16384:
+            if isinstance(return_value, int) and return_value != 65536:
                 self.cta_id = inputNumber
-                self.wipe_status.setText("Wiping")
+                self.wipe_start = datetime.now().strftime("%Y-%m-%d %H:%M")
+                self.wipe_status.setText(self.wipe_start+": Wiping started... ")
+                self.wipe_status.setStyleSheet("background-color: yellow;\
+                                                border: 1px solid black")
                 self.update()
 
                 # Spawn nwipe in DiskWipeWorker
@@ -305,7 +342,7 @@ class DiskWidgetGroup(QWidget):
 
             else:
                 self.start_wipe_button.setEnabled(True)
-
+                self.view_wipelog_button.setEnabled(False)
         else:
             self.start_wipe_button.setEnabled(True)
             msg = QMessageBox()
@@ -428,20 +465,20 @@ def get_disk_serial(dev_path):
 
 
 # Bay ATA port numbers, as determined via lsscsi
-# ---------
-# | 8 | 6 |
-# ---------
-# | 4 | 7 |
-# ---------
-# | 5 | 9 |
-# ---------
+# -----------
+# |  8 | 12 |
+# -----------
+# |  9 | 13 |
+# -----------
+# | 11 | 10 |
+# -----------
 
 top_left = Disk("Top Left", 8)
-top_right = Disk("Top Right", 6)
-mid_left = Disk("Middle left", 4)
-mid_right = Disk("Middle Right", 7)
-bottom_left = Disk("Bottom Left", 5)
-bottom_right = Disk("Bottom Right", 9)
+top_right = Disk("Top Right", 12)
+mid_left = Disk("Middle left", 9)
+mid_right = Disk("Middle Right", 13)
+bottom_left = Disk("Bottom Left", 11)
+bottom_right = Disk("Bottom Right", 10)
 
 disk_list = [top_left, top_right,
              mid_left, mid_right,

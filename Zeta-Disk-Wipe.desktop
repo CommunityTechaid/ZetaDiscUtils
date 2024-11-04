@@ -1,0 +1,11 @@
+[Desktop Entry]
+Icon=org.gnome.Four-in-a-row
+Name[en_GB]=Zeta Disk Wipe
+Comment[en_GB]=CTA Disk Wiping utility for the Zeta host machine
+Keywords[en_GB]=disks
+Exec=/usr/local/bin/Zeta-Disk-Wipe.py
+Terminal=false
+Type=Application
+Categories=Disks,Hardware
+StartupNotify=true
+DBusActivatable=true
